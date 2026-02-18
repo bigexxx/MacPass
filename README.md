@@ -25,15 +25,52 @@ If you want to contribute by fixing a bug, adding a feature or improving localiz
 ```bash
 git clone https://github.com/MacPass/MacPass --recursive
 ```
+* Ensure submodules are initialized (required for `DDHotKey` headers)
+```bash
+cd MacPass
+git submodule update --init --recursive
+```
 * Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage)
 * Install all Dependencies
 ```bash
-cd MacPass
 carthage bootstrap --platform macOS
 ```
-After that you can build and run in Xcode. The following command will build and make the application available through Spotlight. If you run into signing issues take a look at [Issue #92](https://github.com/MacPass/MacPass/issues/92). Since Sparkle is disabled only on the CI build and in Debug mode, you have to explicitly disable it in Release. Otherwise warnings on unsecure updates will appear.
+After that you can build and run in Xcode. The following command performs an unsigned Release build (including modern Xcode signing flags). Since Sparkle is disabled only on the CI build and in Debug mode, you have to explicitly disable it in Release. Otherwise warnings on insecure updates will appear.
 
-    xcodebuild -scheme MacPass -target MacPass -configuration Release CODE_SIGNING_REQUIRED=NO NO_SPARKLE=NO_SPARKLE
+    xcodebuild -scheme MacPass -target MacPass -configuration Release CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= NO_SPARKLE=NO_SPARKLE
+
+### Notes for newer Xcode/Carthage combinations
+
+Some older dependency revisions can fail to build with recent Xcode/Carthage toolchains (for example architecture issues while building `KissXML` / `KeePassKit`).
+
+If `carthage bootstrap --platform macOS` fails but you only need to build MacPass on macOS, use this fallback:
+
+```bash
+carthage bootstrap --platform macOS --no-build
+```
+
+Then build required frameworks manually:
+
+```bash
+# Compatibility patch for newer SDKs (legacy TransformerKit imports)
+sed -i '' 's/@import Darwin.Availability;/#import <Availability.h>/' Carthage/Checkouts/TransformerKit/Sources/NSValueTransformerName.h
+sed -i '' '/@import Darwin.Availability;/d' Carthage/Checkouts/TransformerKit/Sources/NSValueTransformer+TransformerKit.m
+sed -i '' '/@import Darwin.C.xlocale;/d' Carthage/Checkouts/TransformerKit/Sources/TTTDateTransformers.m
+sed -i '' 's/strptime_l(destination, "%FT%T%z", &time, NULL);/strptime(destination, "%FT%T%z", \&time);/' Carthage/Checkouts/TransformerKit/Sources/TTTDateTransformers.m
+sed -i '' 's/strptime_l(source, format, &time, NULL);/strptime(source, format, \&time);/' Carthage/Checkouts/TransformerKit/Sources/TTTDateTransformers.m
+
+xcodebuild -project Carthage/Checkouts/KissXML/KissXML.xcodeproj -scheme "KissXML (macOS)" -configuration Release -derivedDataPath /tmp/carthage-manual-kissxml CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build
+xcodebuild -project Carthage/Checkouts/KeePassKit/KeePassKit.xcodeproj -scheme "KeePassKit macOS" -configuration Release -derivedDataPath /tmp/carthage-manual-keepasskit CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build
+xcodebuild -project Carthage/Checkouts/TransformerKit/TransformerKit.xcodeproj -scheme "TransformerKit macOS" -configuration Release -derivedDataPath /tmp/carthage-manual-transformerkit CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build
+```
+
+Copy the built frameworks into `Carthage/Build/Mac`:
+
+```bash
+cp -R /tmp/carthage-manual-kissxml/Build/Products/Release/KissXML.framework Carthage/Build/Mac/
+cp -R /tmp/carthage-manual-keepasskit/Build/Products/Release/KeePassKit.framework Carthage/Build/Mac/
+cp -R /tmp/carthage-manual-transformerkit/Build/Products/Release/TransformerKit.framework Carthage/Build/Mac/
+```
 
 ## Help
 

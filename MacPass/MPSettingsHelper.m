@@ -67,6 +67,9 @@ NSString *const kMPSettingsKeyAutotypeMatchTitle                                
 NSString *const kMPSettingsKeyAutotypeMatchURL                                  = @"AutotypeMatchURL";
 NSString *const kMPSettingsKeyAutotypeMatchHost                                 = @"AutotypeMatchHost";
 NSString *const kMPSettingsKeyAutotypeMatchTags                                 = @"AutotypeMatchTags";
+NSString *const kMPSettingsKeyAutotypeBrowserURLResolverEnabled                 = @"AutotypeBrowserURLResolverEnabled";
+/* Keep compatibility with the historical AutotypeURL plugin setting key. */
+NSString *const kMPSettingsKeyAutotypeBrowserURLFullMatch                       = @"kMPASettingsKeyFullMatch";
 NSString *const kMPSettingsKeyGloablAutotypeAlwaysShowCandidateSelection        = @"GloablAutotypeAlwaysShowCandidateSelection";
 
 NSString *const kMPSettingsKeyTouchIdEnabled                                    = @"EnableSubsequentUnlocksWithTouchID";
@@ -96,7 +99,6 @@ NSString *const kMPSettingsKeyLoadUnsecurePlugins                               
 NSString *const kMPSettingsKeyLoadIncompatiblePlugins                           = @"LoadIncompatiblePlugins";
 NSString *const kMPSettingsKeyDisabledPlugins                                   = @"DisabledPlugins";
 NSString *const kMPSettingsKeyHideIncopatiblePluginsWarning                     = @"HideIncopatiblePluginsWarning";
-NSString *const kMPSettingsKeyAllowRemoteFetchOfPluginRepository                = @"AllowRemoteFetchOfPluginRepository";
 
 NSString *const kMPSettingsKeyFaviconDownloadMethod                             = @"FaviconDownloadMethod";
 
@@ -167,6 +169,8 @@ NSString *const kMPDepricatedSettingsKeyEntryTouchIdDatabaseEncryptedKeyFormat  
       kMPSettingsKeyAutotypeMatchURL: @NO,
       kMPSettingsKeyAutotypeMatchHost: @NO,
       kMPSettingsKeyAutotypeMatchTags: @NO,
+      kMPSettingsKeyAutotypeBrowserURLResolverEnabled: @NO,
+      kMPSettingsKeyAutotypeBrowserURLFullMatch: @NO,
       kMPSettingsKeyEnableQuicklookPreview: @NO,
       kMPSettingsKeyCopyGeneratedPasswordToClipboard: @NO,
       kMPSettingsKeyDefaultPasswordLength: @12,

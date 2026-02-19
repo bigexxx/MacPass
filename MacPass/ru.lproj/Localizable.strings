@@ -843,3 +843,5 @@
 
 /* Favicon download method: use Google's favicon fetching service */
 "FAVICON_DOWNLOAD_METHOD_GOOGLE" = "Google";
+
+"SECURITY_PREFERENCES" = "Security";

@@ -173,7 +173,28 @@
   BOOL result = self.completionHandler(compositeKey, keyURL, cancel, &error);
   if(result) {
     if(nil != documentKey) {
-      [MPTouchIdCompositeKeyStore.defaultStore saveCompositeKey:compositeKey forDocumentKey:documentKey];
+      NSError *touchIdError = nil;
+      NSInteger touchIdMode = [NSUserDefaults.standardUserDefaults integerForKey:kMPSettingsKeyTouchIdEnabled];
+      BOOL touchIdSaved = [MPTouchIdCompositeKeyStore.defaultStore saveCompositeKey:compositeKey
+                                                                      forDocumentKey:documentKey
+                                                                               error:&touchIdError];
+      NSData *savedTouchIdKey = nil;
+      if(touchIdMode != MPTouchIDKeyStorageDisabled) {
+        savedTouchIdKey = [MPTouchIdCompositeKeyStore.defaultStore loadEncryptedCompositeKeyForDocumentKey:documentKey];
+      }
+      if(!touchIdSaved || (touchIdMode != MPTouchIDKeyStorageDisabled && savedTouchIdKey.length == 0)) {
+        if(touchIdError == nil) {
+          NSString *description = NSLocalizedString(@"ERROR_TOUCHID_STORE_VERIFY_FAILED", @"Error shown when touch id key appears to be saved but cannot be loaded afterwards");
+          touchIdError = [NSError errorWithCode:MPErrorTouchIdUnsupportedKeyForEncrpytion description:description];
+        }
+        [self _showError:touchIdError];
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.alertStyle = NSAlertStyleWarning;
+        alert.messageText = NSLocalizedString(@"TOUCHID_SAVE_FAILED_TITLE", @"Title shown when Touch ID key storage failed");
+        alert.informativeText = touchIdError.descriptionForErrorCode;
+        [alert addButtonWithTitle:NSLocalizedString(@"OK", @"Confirm button title")];
+        [alert runModal];
+      }
     }
     return;
   }
@@ -198,8 +219,12 @@
 }
 
 - (bool) _touchIdIsUnlockAvailable {
-  MPDocument *currentDocument = (MPDocument *)self.windowController.document;
-  return (nil != currentDocument.encryptedKeyData);
+  NSString *documentKey = [self biometricKeyForCurrentDocument];
+  if(documentKey.length == 0) {
+    return NO;
+  }
+  NSInteger touchIdMode = [NSUserDefaults.standardUserDefaults integerForKey:kMPSettingsKeyTouchIdEnabled];
+  return touchIdMode != MPTouchIDKeyStorageDisabled;
 }
 
 - (IBAction)unlockWithTouchID:(id)sender {
@@ -209,7 +234,10 @@
   }
   NSData* encryptedKey = [MPTouchIdCompositeKeyStore.defaultStore loadEncryptedCompositeKeyForDocumentKey:documentKey];
   if(!encryptedKey) {
-    self.touchIdButton.enabled = NO;
+    self.messageInfoTextField.stringValue = NSLocalizedString(@"PASSWORD_INPUT_TOUCHID_NEEDS_PASSWORD_UNLOCK", @"Shown when Touch ID unlock has no stored key yet");
+    self.messageImageView.hidden = NO;
+    self.messageInfoTextField.hidden = NO;
+    self.messageImageView.image = [NSImage imageNamed:NSImageNameInfo];
     return;
   }
   NSError *error;

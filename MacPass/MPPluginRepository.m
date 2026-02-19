@@ -23,7 +23,6 @@
 #import "MPPluginRepository.h"
 #import "MPConstants.h"
 #import "MPPluginRepositoryItem.h"
-#import "MPSettingsHelper.h"
 
 NSString *const MPPluginRepositoryDidUpdateAvailablePluginsNotification = @"com.hicknhack.macpass.MPPluginRepositoryDidInitializeAvailablePluginsNotification";
 
@@ -93,13 +92,7 @@ NSString *const MPPluginRepositoryDidUpdateAvailablePluginsNotification = @"com.
 - (void)_fetchAppropriateRepositoryDataCompletionHandler:(void (^)(NSArray<MPPluginRepositoryItem *> * _Nonnull))completionHandler {
   /* dispatch the call to allow for direct return and handle result later on */
   dispatch_async(dispatch_get_main_queue(), ^{
-    BOOL allowRemoteConnection = [self _askForPluginRepositoryPermission];
-    if(!allowRemoteConnection) {
-      [self _fetchLocalFallbackRepositoryData:completionHandler];
-    }
-    else {
-      [self _fetchRepositoryDataCompletionHandler:completionHandler];      
-    }
+    [self _fetchLocalFallbackRepositoryData:completionHandler];
   });
 }
 
@@ -166,23 +159,6 @@ NSString *const MPPluginRepositoryDidUpdateAvailablePluginsNotification = @"com.
     }
   }
   return [items copy];
-}
-
-- (BOOL)_askForPluginRepositoryPermission {
-  if(![NSUserDefaults.standardUserDefaults objectForKey:kMPSettingsKeyAllowRemoteFetchOfPluginRepository]) {
-    NSAlert *alert = [[NSAlert alloc] init];
-    alert.alertStyle = NSAlertStyleWarning;
-    alert.informativeText = NSLocalizedString(@"ALERT_ASK_FOR_PLUGIN_REPOSITORY_CONNECTION_PERMISSION_INFORMATIVE_TEXT", @"Informative text displayed on the alert that shows up when MacPass asks for permssion to download the plugin repository JSON file");
-    alert.messageText = NSLocalizedString(@"ALERT_ASK_FOR_PLUGIN_REPOSITORY_CONNECTION_PERMISSION_MESSAGE", @"Message displayed on the alert that asks for permission to download the plugin repository JSON file");
-    alert.showsSuppressionButton = YES;
-    [alert addButtonWithTitle:NSLocalizedString(@"ALERT_ASK_FOR_PLUGIN_REPOSITORY_ALLOW_DOWNLOAD", @"Allow the download of the plugin repository file")];
-    [alert addButtonWithTitle:NSLocalizedString(@"ALERT_ASK_FOR_PLUGIN_REPOSITORY_DISALLOW_DOWNLOAD", @"Disallow the download of the plugin repository file")];
-    NSModalResponse repsonse = [alert runModal];
-    BOOL allow = (repsonse == NSAlertFirstButtonReturn);
-    [NSUserDefaults.standardUserDefaults setBool:allow forKey:kMPSettingsKeyAllowRemoteFetchOfPluginRepository];
-    return allow;
-  }
-  return [NSUserDefaults.standardUserDefaults boolForKey:kMPSettingsKeyAllowRemoteFetchOfPluginRepository];
 }
 
 @end

@@ -35,9 +35,23 @@ git submodule update --init --recursive
 ```bash
 carthage bootstrap --platform macOS
 ```
-After that you can build and run in Xcode. The following command performs an unsigned Release build (including modern Xcode signing flags). Since Sparkle is disabled only on the CI build and in Debug mode, you have to explicitly disable it in Release. Otherwise warnings on insecure updates will appear.
+After that you can build and run in Xcode.
+
+Unsigned Release build:
 
     xcodebuild -scheme MacPass -target MacPass -configuration Release CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= NO_SPARKLE=NO_SPARKLE
+
+Signed Release build:
+
+```bash
+xcodebuild -project MacPass.xcodeproj -scheme MacPass -configuration Release -sdk macosx build
+```
+
+For signed builds, make sure the target has valid signing settings in Xcode:
+
+* `Signing & Capabilities` -> `Automatically manage signing` enabled
+* A valid `Team` selected
+* A valid macOS `Signing Certificate` and provisioning profile available on your machine
 
 ### Notes for newer Xcode/Carthage combinations
 

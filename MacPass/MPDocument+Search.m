@@ -26,6 +26,7 @@
 #import "KeePassKit/KeePassKit.h"
 
 #import "MPFlagsHelper.h"
+#import <objc/runtime.h>
 
 NSString *const MPDocumentDidEnterSearchNotification  = @"com.hicknhack.macpass.MPDocumentDidEnterSearchNotification";
 NSString *const MPDocumentDidChangeSearchFlags        = @"com.hicknhack.macpass.MPDocumentDidChangeSearchFlagsNotification";
@@ -35,6 +36,18 @@ NSString *const MPDocumentDidChangeSearchResults      = @"com.hicknhack.macpass.
 
 NSString *const kMPDocumentSearchResultsKey           = @"kMPDocumentSearchResultsKey";
 
+static const void *kMPSearchGenerationKey = &kMPSearchGenerationKey;
+
+static NSUInteger _MPSearchGeneration(MPDocument *document) {
+  NSNumber *value = objc_getAssociatedObject(document, kMPSearchGenerationKey);
+  return value.unsignedIntegerValue;
+}
+
+static NSUInteger _MPAdvanceSearchGeneration(MPDocument *document) {
+  NSUInteger generation = _MPSearchGeneration(document) + 1;
+  objc_setAssociatedObject(document, kMPSearchGenerationKey, @(generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  return generation;
+}
 
 @implementation MPDocument (Search)
 
@@ -64,12 +77,21 @@ NSString *const kMPDocumentSearchResultsKey           = @"kMPDocumentSearchResul
     return; // We get called back!
   }
   MPDocumentWindowController *windowController = self.windowControllers.firstObject;
-  self.searchContext.searchString = windowController.searchField.stringValue;
+  self.searchContext.searchString = windowController.searchField.stringValue ?: @"";
+  MPEntrySearchContext *searchContext = [self.searchContext copy];
+  NSUInteger searchGeneration = _MPAdvanceSearchGeneration(self);
   MPDocument __weak *weakSelf = self;
   dispatch_queue_t backgroundQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
   dispatch_async(backgroundQueue, ^{
-    NSArray *results = [weakSelf _findEntriesMatchingSearch:weakSelf.searchContext];
-    dispatch_sync(dispatch_get_main_queue(), ^{
+    MPDocument *strongSelf = weakSelf;
+    if(!strongSelf) {
+      return;
+    }
+    NSArray *results = [strongSelf _findEntriesMatchingSearch:searchContext];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if(!weakSelf.hasSearch || _MPSearchGeneration(weakSelf) != searchGeneration) {
+        return; // Ignore stale search result updates.
+      }
       [NSNotificationCenter.defaultCenter postNotificationName:MPDocumentDidChangeSearchResults object:weakSelf userInfo:@{ kMPDocumentSearchResultsKey: results }];
     });
   });
@@ -81,6 +103,7 @@ NSString *const kMPDocumentSearchResultsKey           = @"kMPDocumentSearchResul
   [NSNotificationCenter.defaultCenter removeObserver:self name:KPKTreeDidAddGroupNotification object:self.tree];
   [NSNotificationCenter.defaultCenter removeObserver:self name:KPKTreeDidRemoveEntryNotification object:self.tree];
   [NSNotificationCenter.defaultCenter removeObserver:self name:KPKTreeDidRemoveGroupNotification object:self.tree];
+  _MPAdvanceSearchGeneration(self);
   
   self.searchContext = nil;
   [NSNotificationCenter.defaultCenter postNotificationName:MPDocumentDidExitSearchNotification object:self];
@@ -136,6 +159,11 @@ NSString *const kMPDocumentSearchResultsKey           = @"kMPDocumentSearchResul
 
 #pragma mark Search
 - (NSArray *)_findEntriesMatchingSearch:(MPEntrySearchContext *)context {
+  NSString *searchString = context.searchString ?: @"";
+  /* Empty search must not filter: show every entry. */
+  if(searchString.length == 0) {
+    return [self.root searchableChildEntries];
+  }
   /* Filter double passwords */
   if(MPIsFlagSetInOptions(MPEntrySearchDoublePasswords, context.searchFlags)) {
     NSMutableDictionary *passwordToEntryMap = [[NSMutableDictionary alloc] initWithCapacity:100];
@@ -170,8 +198,8 @@ NSString *const kMPDocumentSearchResultsKey           = @"kMPDocumentSearchResul
     return [[self.root searchableChildEntries] filteredArrayUsingPredicate:expiredPredicate];
   }
   /* Filter using predicates */
-  NSArray *predicates = [self _filterPredicatesWithString:context.searchString];
-  if(predicates) {
+  NSArray *predicates = [self _filterPredicatesWithString:searchString searchFlags:context.searchFlags];
+  if(predicates.count > 0) {
     NSPredicate *fullFilter = [NSCompoundPredicate orPredicateWithSubpredicates:predicates];
     return [[self.root searchableChildEntries] filteredArrayUsingPredicate:fullFilter];
   }
@@ -179,25 +207,25 @@ NSString *const kMPDocumentSearchResultsKey           = @"kMPDocumentSearchResul
   return [self.root searchableChildEntries];
 }
 
-- (NSArray *)_filterPredicatesWithString:(NSString *)string{
+- (NSArray *)_filterPredicatesWithString:(NSString *)string searchFlags:(MPEntrySearchFlags)searchFlags {
   NSMutableArray *prediactes = [[NSMutableArray alloc] initWithCapacity:4];
   
-  BOOL searchInAllAttributes = MPIsFlagSetInOptions(MPEntrySearchAllAttributes, self.searchContext.searchFlags);
+  BOOL searchInAllAttributes = MPIsFlagSetInOptions(MPEntrySearchAllAttributes, searchFlags);
   
   
-  if(MPIsFlagSetInOptions(MPEntrySearchTitles, self.searchContext.searchFlags)) {
+  if(MPIsFlagSetInOptions(MPEntrySearchTitles, searchFlags)) {
     [prediactes addObject:[NSPredicate predicateWithFormat:@"SELF.title CONTAINS[cd] %@", string]];
   }
-  if(MPIsFlagSetInOptions(MPEntrySearchUsernames, self.searchContext.searchFlags)) {
+  if(MPIsFlagSetInOptions(MPEntrySearchUsernames, searchFlags)) {
     [prediactes addObject:[NSPredicate predicateWithFormat:@"SELF.username CONTAINS[cd] %@", string]];
   }
-  if(MPIsFlagSetInOptions(MPEntrySearchUrls, self.searchContext.searchFlags)) {
+  if(MPIsFlagSetInOptions(MPEntrySearchUrls, searchFlags)) {
     [prediactes addObject:[NSPredicate predicateWithFormat:@"SELF.url CONTAINS[cd] %@", string]];
   }
-  if(MPIsFlagSetInOptions(MPEntrySearchPasswords, self.searchContext.searchFlags)) {
+  if(MPIsFlagSetInOptions(MPEntrySearchPasswords, searchFlags)) {
     [prediactes addObject:[NSPredicate predicateWithFormat:@"SELF.password CONTAINS[cd] %@", string]];
   }
-  if(MPIsFlagSetInOptions(MPEntrySearchNotes, self.searchContext.searchFlags)) {
+  if(MPIsFlagSetInOptions(MPEntrySearchNotes, searchFlags)) {
     [prediactes addObject:[NSPredicate predicateWithFormat:@"SELF.notes CONTAINS[cd] %@", string]];
   }
   if(searchInAllAttributes) {

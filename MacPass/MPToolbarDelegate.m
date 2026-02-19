@@ -169,23 +169,25 @@ NSString *const MPToolbarItemIdentifierAutotype     = @"TOOLBAR_AUTOTYPE";
       item.menuFormRepresentation = menuRepresentation;
     }
     else if( [itemIdentifier isEqualToString:MPToolbarItemIdentifierSearch]){
-      NSSearchField *searchField = [[NSSearchField alloc] init];
+      NSView *searchContainer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 32)];
+      NSSearchField *searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 2, 320, 28)];
+      searchField.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      searchField.bordered = YES;
+      searchField.bezeled = YES;
+      searchField.drawsBackground = YES;
+      searchField.focusRingType = NSFocusRingTypeDefault;
       searchField.action = @selector(updateSearch:);
       NSSearchFieldCell *cell = searchField.cell;
+      cell.bezelStyle = NSTextFieldRoundedBezel;
       cell.cancelButtonCell.action = @selector(exitSearch:);
       cell.cancelButtonCell.target = nil;
       searchField.recentsAutosaveName = @"RecentEntrySearches";
-      item.view = searchField;
+      [searchContainer addSubview:searchField];
+      item.view = searchContainer;
       item.visibilityPriority = NSToolbarItemVisibilityPriorityHigh;
-      
-      if(@available(macOS 11, *)) {
-        // do not call any sizing API
-      }
-      else {
-        /* Use default size base on documentation */
-        item.minSize = NSMakeSize(140, 32);
-        item.maxSize = NSMakeSize(400, 32);
-      }
+      /* Keep the search field noticeably wider in the toolbar. */
+      item.minSize = NSMakeSize(240, 32);
+      item.maxSize = NSMakeSize(560, 32);
       
       NSMenu *templateMenu = [self _allocateSearchMenuTemplate];
       searchField.searchMenuTemplate = templateMenu;
@@ -261,6 +263,15 @@ NSString *const MPToolbarItemIdentifierAutotype     = @"TOOLBAR_AUTOTYPE";
     });
   }
   return NO;
+}
+
+- (void)controlTextDidChange:(NSNotification *)notification {
+  if(notification.object != self.searchField) {
+    return;
+  }
+  if(self.searchField.stringValue.length == 0) {
+    [[NSApp targetForAction:@selector(updateSearch:) to:nil from:self] updateSearch:self.searchField];
+  }
 }
 
 #pragma mark - Private

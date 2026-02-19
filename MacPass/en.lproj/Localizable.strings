@@ -886,3 +886,34 @@
 /* Yesterday */
 "YESTERDAY" = "Yesterday";
 
+/* Menu item to disable Touch ID key storage */
+"TOUCHID_DISABLED" = "Touch ID Off";
+
+/* Menu item to keep the Touch ID key only in memory for this app session */
+"TOUCHID_TRANSIENT_KEY_STORAGE" = "Touch ID (This Session)";
+
+/* Menu item to keep the Touch ID key persistently in secure storage */
+"TOUCHID_PERSISTENT_KEY_STORAGE" = "Touch ID (Remember)";
+
+/* Tooltip displayed when Touch ID is fully enabled (persistent storage) */
+"TOOLTIP_TOUCHID_ENABELD" = "Touch ID stores the unlock key securely and can be used across app restarts.";
+
+/* Tooltip displayed when Touch ID is disabled */
+"TOOLTIP_TOUCHID_DISABLED" = "Touch ID unlock is disabled.";
+
+/* Tooltip displayed when Touch ID uses transient in-memory storage */
+"TOOLTIP_TOUCHID_TRANSIENT" = "Touch ID is enabled for this app session only.";
+
+/* Message shown when Touch ID is enabled but no encrypted unlock key is stored yet */
+"PASSWORD_INPUT_TOUCHID_NEEDS_PASSWORD_UNLOCK" = "Touch ID is ready, but no unlock key is stored yet. Unlock once with password and/or key file first.";
+
+/* Generic error shown when storing the encrypted unlock key for Touch ID fails */
+"ERROR_TOUCHID_STORE_FAILED" = "Could not store the Touch ID unlock key.";
+
+/* Error shown when Touch ID key save appears successful but cannot be loaded */
+"ERROR_TOUCHID_STORE_VERIFY_FAILED" = "Touch ID key could not be verified after saving.";
+
+/* Alert title shown when Touch ID key save/verify fails after password unlock */
+"TOUCHID_SAVE_FAILED_TITLE" = "Touch ID Setup Failed";
+
+"SECURITY_PREFERENCES" = "Security";

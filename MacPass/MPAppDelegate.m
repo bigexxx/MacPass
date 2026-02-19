@@ -49,8 +49,6 @@
 
 #import "KeePassKit/KeePassKit.h"
 
-#import <Sparkle/Sparkle.h>
-
 NSString *const MPDidChangeStoredKeyFilesSettings = @"com.hicknhack.macpass.MPDidChangeStoredKeyFilesSettings";
 
 typedef NS_OPTIONS(NSInteger, MPAppStartupState) {
@@ -67,7 +65,6 @@ typedef NS_OPTIONS(NSInteger, MPAppStartupState) {
 }
 
 @property (strong) NSWindow *welcomeWindow;
-@property (strong) SPUUpdater *updater;
 @property (strong) IBOutlet NSWindow *passwordCreatorWindow;
 @property (strong, nonatomic) MPPreferencesWindowController *preferencesController;
 @property (strong, nonatomic) MPPasswordCreatorViewController *passwordCreatorController;
@@ -209,19 +206,10 @@ typedef NS_OPTIONS(NSInteger, MPAppStartupState) {
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
-#if defined(NO_SPARKLE)
-  NSLog(@"Sparkle explicitly disabled!!!");
-#endif
   /* Initalizes Global Daemons */
   [MPLockDaemon defaultDaemon];
   [MPAutotypeDaemon defaultDaemon];
   [MPPluginHost sharedHost];
-#if !defined(DEBUG) && !defined(NO_SPARKLE)
-  /* Disable updates if in debug or nosparkle  */
-  SPUStandardUserDriver *userDriver = [[SPUStandardUserDriver alloc] initWithHostBundle:NSBundle.mainBundle delegate:nil];
-  self.updater = [[SPUUpdater alloc] initWithHostBundle:NSBundle.mainBundle applicationBundle:NSBundle.mainBundle userDriver:userDriver delegate:nil];
-  [self.updater startUpdater:nil];
-#endif
   self.startupState |= MPAppStartupStateFinishedLaunch;
   // Here we just opt-in for allowing our bar to be customized throughout the app.
   NSApplication.sharedApplication.automaticCustomizeTouchBarMenuItemEnabled = YES;
@@ -360,15 +348,11 @@ typedef NS_OPTIONS(NSInteger, MPAppStartupState) {
 }
 
 - (void)checkForUpdates:(id)sender {
-#if defined(DEBUG) || defined(NO_SPARKLE)
   NSAlert *alert = [[NSAlert alloc] init];
   alert.messageText = NSLocalizedString(@"ALERT_UPDATES_DISABLED_MESSAGE_TEXT", @"Message text for disabled updates alert!");
   alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"ALERT_UPDATES_DISABLED_INFORMATIVE_TEXT_%@!", @"Informative text of the disabled updates alert!"), NSApp.applicationName];
   [alert addButtonWithTitle:NSLocalizedString(@"OK", @"Ok Button to dismiss disabled updates alert")];
   [alert runModal];
-#else
-  [self.updater checkForUpdates];
-#endif
 }
 
 #pragma mark -

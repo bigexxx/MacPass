@@ -18,7 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// The key is encrypted and then stored to the corresponding location (transient or permanent)
 /// @param compositeKey the composite key to store
 /// @param documentKey the document key to store the composite key for
-- (void)saveCompositeKey:(KPKCompositeKey *)compositeKey forDocumentKey:(NSString*)documentKey;
+- (BOOL)saveCompositeKey:(KPKCompositeKey *)compositeKey forDocumentKey:(NSString*)documentKey error:(NSError **)error;
 
 /// Load the encrypted composite key for the given key if anyone is found
 /// @param documentKey the key to identify the document. Normally you should use the file name

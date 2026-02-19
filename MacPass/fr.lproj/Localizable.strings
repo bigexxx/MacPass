@@ -844,3 +844,5 @@
 /* Yesterday */
 "YESTERDAY" = "Hier";
 
+
+"SECURITY_PREFERENCES" = "Security";

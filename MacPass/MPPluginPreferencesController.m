@@ -42,7 +42,6 @@ typedef NS_ENUM(NSUInteger, MPPluginSegmentType) {
 
 @interface MPPluginPreferencesController () <NSTableViewDataSource, NSTableViewDelegate>
 
-@property (strong) IBOutlet NSButton *allowRemoteConnectionCheckButton;
 @property (strong) IBOutlet NSTableView *pluginTableView;
 @property (strong) IBOutlet NSView *settingsView;
 @property (strong) IBOutlet NSView *fallbackSettingsView;
@@ -84,10 +83,6 @@ typedef NS_ENUM(NSUInteger, MPPluginSegmentType) {
                                         toObject:NSUserDefaultsController.sharedUserDefaultsController
                                      withKeyPath:[MPSettingsHelper defaultControllerPathForKey:kMPSettingsKeyLoadIncompatiblePlugins]
                                          options:nil];
-  [self.allowRemoteConnectionCheckButton bind:NSValueBinding
-                                     toObject:NSUserDefaultsController.sharedUserDefaultsController
-                                  withKeyPath:[MPSettingsHelper defaultControllerPathForKey:kMPSettingsKeyAllowRemoteFetchOfPluginRepository]
-                                      options:nil];
   [self.pluginTableView registerForDraggedTypes:@[(NSString *)kUTTypeFileURL]];
 }
 

@@ -10,6 +10,22 @@
 #import "NSRunningApplication+MPAdditions.h"
 #import "MPPluginHost.h"
 #import "MPPlugin.h"
+#import "MPSettingsHelper.h"
+
+static NSString *const MPAutotypeChromeBundleIdentifier = @"com.google.Chrome";
+static NSString *const MPAutotypeBraveBundleIdentifier = @"com.brave.Browser";
+static NSString *const MPAutotypeEdgeBundleIdentifier = @"com.microsoft.edgemac";
+static NSString *const MPAutotypeChromiumBundleIdentifier = @"org.chromium.Chromium";
+static const int64_t MPAutotypeURLResolutionTimeoutNanos = (int64_t)(0.2 * NSEC_PER_SEC);
+
+static dispatch_queue_t MPAutotypeURLResolverQueue(void) {
+  static dispatch_queue_t queue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    queue = dispatch_queue_create("com.hicknhack.macpass.autotype-url-resolver", DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
 
 @implementation MPAutotypeEnvironment
 
@@ -35,14 +51,21 @@
       _windowTitle = frontApplicationInfoDict[MPWindowTitleKey];
       _windowId = (CGWindowID)[frontApplicationInfoDict[MPWindowIDKey] integerValue];
       
-      /* if we have any resolvers, let them provide the window title */
+      NSString *resolvedWindowTitle = @"";
+      /* if we have any plugin resolvers, let them provide the window title */
       NSArray *resolvers = [MPPluginHost.sharedHost windowTitleResolverForRunningApplication:targetApplication];
       for(MPPlugin<MPAutotypeWindowTitleResolverPlugin> *resolver in resolvers) {
         NSString *windowTitle = [resolver windowTitleForRunningApplication:targetApplication];
         if(windowTitle.length > 0) {
-          _windowTitle = windowTitle;
+          resolvedWindowTitle = windowTitle;
           break;
         }
+      }
+      if(resolvedWindowTitle.length <= 0) {
+        resolvedWindowTitle = [self _nativeResolvedWindowTitleForRunningApplication:targetApplication];
+      }
+      if(resolvedWindowTitle.length > 0) {
+        _windowTitle = resolvedWindowTitle;
       }
     }
     
@@ -83,6 +106,74 @@
     NSLog(@"Unable to retrieve any window names. If you encounter this issue you might be running 10.15 and MacPass has no permission for screen recording.");
   }
   return infoDict;
+}
+
+- (NSString *)_nativeResolvedWindowTitleForRunningApplication:(NSRunningApplication *)runningApplication {
+  if(![NSUserDefaults.standardUserDefaults boolForKey:kMPSettingsKeyAutotypeBrowserURLResolverEnabled]) {
+    return @"";
+  }
+  dispatch_queue_t queue = MPAutotypeURLResolverQueue();
+  __block NSString *resolvedWindowTitle = @"";
+  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+  dispatch_async(queue, ^{
+    resolvedWindowTitle = [self _resolvedNativeWindowTitleForRunningApplication:runningApplication];
+    dispatch_semaphore_signal(semaphore);
+  });
+  long timedOut = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, MPAutotypeURLResolutionTimeoutNanos));
+  if(timedOut != 0) {
+    return @"";
+  }
+  return resolvedWindowTitle;
+}
+
+- (NSString *)_resolvedNativeWindowTitleForRunningApplication:(NSRunningApplication *)runningApplication {
+  NSString *urlString = [self _URLForRunningApplication:runningApplication];
+  NSString *trimmedURLString = [urlString stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  if(trimmedURLString.length <= 0) {
+    return @"";
+  }
+
+  NSURL *url = [[NSURL alloc] initWithString:trimmedURLString];
+  if(url.host.length <= 0) {
+    return @"";
+  }
+
+  BOOL useFullURL = [NSUserDefaults.standardUserDefaults boolForKey:kMPSettingsKeyAutotypeBrowserURLFullMatch];
+  return useFullURL ? trimmedURLString : url.host;
+}
+
+- (NSString *)_URLForRunningApplication:(NSRunningApplication *)runningApplication {
+  NSString *bundleIdentifier = runningApplication.bundleIdentifier ?: @"";
+  if(bundleIdentifier.length <= 0) {
+    return @"";
+  }
+
+  NSSet *supportedChromiumBundleIdentifiers = [NSSet setWithArray:@[
+    MPAutotypeChromeBundleIdentifier,
+    MPAutotypeBraveBundleIdentifier,
+    MPAutotypeEdgeBundleIdentifier,
+    MPAutotypeChromiumBundleIdentifier
+  ]];
+  if([supportedChromiumBundleIdentifiers containsObject:bundleIdentifier]) {
+    NSArray<NSRunningApplication *> *runningApplications = [NSRunningApplication runningApplicationsWithBundleIdentifier:bundleIdentifier];
+    if(runningApplications.count <= 0) {
+      return @"";
+    }
+    NSString *localizedName = runningApplication.localizedName ?: @"";
+    NSString *escapedLocalizedName = [localizedName stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+    if(escapedLocalizedName.length <= 0) {
+      return @"";
+    }
+    NSString *source = [NSString stringWithFormat:@"tell application \"%@\" to get URL of active tab of front window", escapedLocalizedName];
+    return [self _runAppleScript:source];
+  }
+  return @"";
+}
+
+- (NSString *)_runAppleScript:(NSString *)source {
+  NSAppleScript *script = [[NSAppleScript alloc] initWithSource:source];
+  NSAppleEventDescriptor *eventDescriptor = [script executeAndReturnError:NULL];
+  return eventDescriptor.stringValue ?: @"";
 }
 
 @end

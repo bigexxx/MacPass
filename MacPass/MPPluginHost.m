@@ -111,7 +111,16 @@ NSString *const MPPluginHostPluginBundleIdentifiyerKey = @"MPPluginHostPluginBun
   }
   NSURL *appSupportURL = [NSApp applicationSupportDirectoryURL:YES];
   NSURL *destinationURL = [appSupportURL URLByAppendingPathComponent:fileName];
-  return [NSFileManager.defaultManager moveItemAtURL:url toURL:destinationURL error:error];
+  NSFileManager *fileManager = NSFileManager.defaultManager;
+  if([destinationURL.path isEqualToString:url.path]) {
+    return YES;
+  }
+  if([fileManager fileExistsAtPath:destinationURL.path]) {
+    if(![fileManager trashItemAtURL:destinationURL resultingItemURL:nil error:error]) {
+      return NO;
+    }
+  }
+  return [fileManager moveItemAtURL:url toURL:destinationURL error:error];
 }
 
 - (BOOL)uninstallPlugin:(MPPlugin *)plugin error:(NSError *__autoreleasing *)error {

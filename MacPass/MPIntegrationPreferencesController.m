@@ -33,6 +33,9 @@
 @interface MPIntegrationPreferencesController ()
 
 @property (nonatomic, strong) DDHotKey *hotKey;
+@property (nonatomic, strong) NSButton *browserURLResolverEnabledCheckBox;
+@property (nonatomic, strong) NSButton *browserURLHostRadioButton;
+@property (nonatomic, strong) NSButton *browserURLFullRadioButton;
 
 @end
 
@@ -77,6 +80,8 @@
                                                  toObject:defaultsController
                                               withKeyPath:[MPSettingsHelper defaultControllerPathForKey:kMPSettingsKeyGloablAutotypeAlwaysShowCandidateSelection]
                                                   options:nil];
+
+  [self _setupNativeBrowserURLResolverControls];
   
   [self _showKeyCodeMissingKeyWarning:NO];
   [self _updateAccessabilityWarning];
@@ -86,6 +91,7 @@
   if(!_hotKey) {
     _hotKey = [DDHotKey hotKeyWithKeyData:[NSUserDefaults.standardUserDefaults dataForKey:kMPSettingsKeyGlobalAutotypeKeyDataKey]];
   }
+  [self _updateNativeBrowserURLResolverControls];
   /* Only call the setter if the hotkeys are different, otherwise the dealloc call will unregister them*/
   if(![self.hotKeyTextField.hotKey isEqual:self.hotKey]) {
     self.hotKeyTextField.hotKey = self.hotKey;
@@ -115,6 +121,71 @@
 
 - (void)_showKeyCodeMissingKeyWarning:(BOOL)show {
   self.hotkeyWarningTextField.hidden = !show;
+}
+
+- (void)_setupNativeBrowserURLResolverControls {
+  if(self.browserURLResolverEnabledCheckBox != nil) {
+    return;
+  }
+
+  NSButton *enableCheckBox = [[NSButton alloc] initWithFrame:NSZeroRect];
+  enableCheckBox.buttonType = NSSwitchButton;
+  enableCheckBox.title = @"Use browser URL for Autotype matching";
+  enableCheckBox.target = self;
+  enableCheckBox.action = @selector(_toggleNativeBrowserURLResolver:);
+  enableCheckBox.translatesAutoresizingMaskIntoConstraints = NO;
+
+  NSButton *hostRadioButton = [[NSButton alloc] initWithFrame:NSZeroRect];
+  hostRadioButton.buttonType = NSRadioButton;
+  hostRadioButton.title = @"Use URL host as window title";
+  hostRadioButton.target = self;
+  hostRadioButton.action = @selector(_toggleNativeBrowserURLMode:);
+  hostRadioButton.translatesAutoresizingMaskIntoConstraints = NO;
+
+  NSButton *fullRadioButton = [[NSButton alloc] initWithFrame:NSZeroRect];
+  fullRadioButton.buttonType = NSRadioButton;
+  fullRadioButton.title = @"Use full URL as window title";
+  fullRadioButton.target = self;
+  fullRadioButton.action = @selector(_toggleNativeBrowserURLMode:);
+  fullRadioButton.translatesAutoresizingMaskIntoConstraints = NO;
+
+  self.browserURLResolverEnabledCheckBox = enableCheckBox;
+  self.browserURLHostRadioButton = hostRadioButton;
+  self.browserURLFullRadioButton = fullRadioButton;
+
+  NSUInteger insertIndex = [self.autotypeStackView.arrangedSubviews indexOfObject:self.sendCommandForControlCheckBox];
+  if(insertIndex == NSNotFound) {
+    insertIndex = self.autotypeStackView.arrangedSubviews.count;
+  }
+  [self.autotypeStackView insertArrangedSubview:self.browserURLResolverEnabledCheckBox atIndex:insertIndex];
+  [self.autotypeStackView insertArrangedSubview:self.browserURLHostRadioButton atIndex:insertIndex + 1];
+  [self.autotypeStackView insertArrangedSubview:self.browserURLFullRadioButton atIndex:insertIndex + 2];
+
+  [self _updateNativeBrowserURLResolverControls];
+}
+
+- (void)_toggleNativeBrowserURLResolver:(id)sender {
+  BOOL enabled = (self.browserURLResolverEnabledCheckBox.state == NSOnState);
+  [NSUserDefaults.standardUserDefaults setBool:enabled forKey:kMPSettingsKeyAutotypeBrowserURLResolverEnabled];
+  [self _updateNativeBrowserURLResolverControls];
+}
+
+- (void)_toggleNativeBrowserURLMode:(id)sender {
+  BOOL useFullURL = (sender == self.browserURLFullRadioButton);
+  [NSUserDefaults.standardUserDefaults setBool:useFullURL forKey:kMPSettingsKeyAutotypeBrowserURLFullMatch];
+  [self _updateNativeBrowserURLResolverControls];
+}
+
+- (void)_updateNativeBrowserURLResolverControls {
+  BOOL enabled = [NSUserDefaults.standardUserDefaults boolForKey:kMPSettingsKeyAutotypeBrowserURLResolverEnabled];
+  BOOL useFullURL = [NSUserDefaults.standardUserDefaults boolForKey:kMPSettingsKeyAutotypeBrowserURLFullMatch];
+
+  self.browserURLResolverEnabledCheckBox.state = enabled ? NSOnState : NSOffState;
+  self.browserURLHostRadioButton.state = useFullURL ? NSOffState : NSOnState;
+  self.browserURLFullRadioButton.state = useFullURL ? NSOnState : NSOffState;
+
+  self.browserURLHostRadioButton.enabled = enabled;
+  self.browserURLFullRadioButton.enabled = enabled;
 }
 
 - (void)_updateAccessabilityWarning {

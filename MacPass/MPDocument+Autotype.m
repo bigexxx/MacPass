@@ -46,12 +46,16 @@
 }
 
 - (NSArray *)autotypContextsForWindowTitle:(NSString *)windowTitle preferredEntry:(KPKEntry *)entry {
-  if(!windowTitle) {
-    return nil;
-  }
   BOOL usePreferredEntry = (nil != entry);
   /* We might get a preferred entry from other documents, if so, stop searching and return */
   if(usePreferredEntry && entry.rootGroup != self.root) {
+    return nil;
+  }
+  if(windowTitle.length <= 0) {
+    if(usePreferredEntry) {
+      MPAutotypeContext *fallbackContext = [[MPAutotypeContext alloc] initWithDefaultSequenceForEntry:entry];
+      return fallbackContext.valid ? @[fallbackContext] : @[];
+    }
     return nil;
   }
   NSArray *autotypeEntries = usePreferredEntry ? [[NSArray alloc] initWithObjects:entry, nil] : [self.root autotypeableChildEntries];

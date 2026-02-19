@@ -889,3 +889,5 @@
 /* Yesterday */
 "YESTERDAY" = "Gestern";
 
+
+"SECURITY_PREFERENCES" = "Security";

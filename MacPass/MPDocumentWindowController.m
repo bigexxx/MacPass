@@ -100,8 +100,12 @@ typedef void (^MPPasswordChangedBlock)(BOOL didChangePassword);
 #pragma mark Properties
 
 - (void)setAllowScreenshots:(BOOL)allowScreenshots {
-  if (_allowScreenshots != allowScreenshots) {
-    _allowScreenshots = allowScreenshots;
+  BOOL effectiveAllowScreenshots = allowScreenshots;
+#if defined(DEBUG)
+  effectiveAllowScreenshots = YES;
+#endif
+  if (_allowScreenshots != effectiveAllowScreenshots) {
+    _allowScreenshots = effectiveAllowScreenshots;
   }
   self.window.sharingType = _allowScreenshots ? NSWindowSharingReadOnly : NSWindowSharingNone;
 }

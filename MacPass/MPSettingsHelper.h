@@ -78,6 +78,8 @@ APPKIT_EXTERN NSString *const kMPSettingsKeyAutotypeMatchTitle;                 
 APPKIT_EXTERN NSString *const kMPSettingsKeyAutotypeMatchURL;                           // Autotype lookup includes entry URL
 APPKIT_EXTERN NSString *const kMPSettingsKeyAutotypeMatchHost;                          // Autotype lookup includes host part of entry URL
 APPKIT_EXTERN NSString *const kMPSettingsKeyAutotypeMatchTags;                          // Autotype lookup includes tags for entries
+APPKIT_EXTERN NSString *const kMPSettingsKeyAutotypeBrowserURLResolverEnabled;          // Use browser URL as autotype window title
+APPKIT_EXTERN NSString *const kMPSettingsKeyAutotypeBrowserURLFullMatch;                // If YES use full URL, otherwise host only
 APPKIT_EXTERN NSString *const kMPSettingsKeyGloablAutotypeAlwaysShowCandidateSelection; // If YES, will always display then candidate selection window befor perfoming an Autotype
 
 /* Search */
@@ -98,7 +100,6 @@ APPKIT_EXTERN NSString *const kMPSettingsKeyLoadUnsecurePlugins;            // I
 APPKIT_EXTERN NSString *const kMPSettingsKeyDisabledPlugins;                // NSArray of bundle identifiers of disabled plugins
 APPKIT_EXTERN NSString *const kMPSettingsKeyLoadIncompatiblePlugins;        // If set to YES incompatible plugins (no version info, marked as incompatible, etc) will be loaded regardless
 APPKIT_EXTERN NSString *const kMPSettingsKeyHideIncopatiblePluginsWarning;  // Do not show an alert, when MacPass encounteres incompatible plugins
-APPKIT_EXTERN NSString *const kMPSettingsKeyAllowRemoteFetchOfPluginRepository; // Allow the download of the plugin repository file
 
 /* Network */
 APPKIT_EXTERN NSString *const kMPSettingsKeyFaviconDownloadMethod;

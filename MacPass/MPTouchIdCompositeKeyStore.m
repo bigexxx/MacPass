@@ -15,6 +15,7 @@
 @interface MPTouchIdCompositeKeyStore ()
 @property (readonly, strong) NSMutableDictionary* keys;
 @property (nonatomic) MPTouchIDKeyStorage touchIdEnabledState;
+- (BOOL)_createAndAddRSAKeyPair:(NSError **)error;
 @end
 
 @implementation MPTouchIdCompositeKeyStore
@@ -58,12 +59,15 @@
   _touchIdEnabledState = touchIdEnabledState;
 }
 
-- (void)saveCompositeKey:(KPKCompositeKey *)compositeKey forDocumentKey:(NSString *)documentKey {
-  NSError *error;
-  NSData *encryptedCompositeKey = [self encryptedDataForCompositeKey:compositeKey error:&error];
+- (BOOL)saveCompositeKey:(KPKCompositeKey *)compositeKey forDocumentKey:(NSString *)documentKey error:(NSError *__autoreleasing  _Nullable *)error {
+  NSError *encryptionError;
+  NSData *encryptedCompositeKey = [self encryptedDataForCompositeKey:compositeKey error:&encryptionError];
   if(!encryptedCompositeKey) {
-    NSLog(@"Unable ot encrypt composite key: %@", error);
-    return;
+    NSLog(@"Unable to encrypt composite key: %@", encryptionError);
+    if(error != NULL) {
+      *error = encryptionError;
+    }
+    return NO;
   }
 
   switch(self.touchIdEnabledState) {
@@ -87,6 +91,7 @@
       NSAssert(NO,@"Unsupported internal touchID preferences value.");
       break;
   }
+  return YES;
 }
 - (NSData *)loadEncryptedCompositeKeyForDocumentKey:(NSString *)documentKey {
   NSInteger touchIdMode = [NSUserDefaults.standardUserDefaults integerForKey:kMPSettingsKeyTouchIdEnabled];
@@ -162,16 +167,21 @@
   NSDictionary *getquery = @{
     (id)kSecClass: (id)kSecClassKey,
     (id)kSecAttrApplicationTag: tag,
+    (id)kSecAttrKeyType: (id)kSecAttrKeyTypeRSA,
     (id)kSecReturnRef: @YES,
   };
   SecKeyRef publicKey = NULL;
   OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)getquery, (CFTypeRef *)&publicKey);
   if (status != errSecSuccess) {
-    [self _createAndAddRSAKeyPair];
+    NSError *keyCreationError = nil;
+    [self _createAndAddRSAKeyPair:&keyCreationError];
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)getquery, (CFTypeRef *)&publicKey);
     if (status != errSecSuccess) {
       NSString* description = CFBridgingRelease(SecCopyErrorMessageString(status, NULL));
       NSLog(@"Error while trying to query public key from Keychain: %@", description);
+      if(error != NULL) {
+        *error = keyCreationError ?: [NSError errorWithCode:status description:description];
+      }
       return nil;
     }
   }
@@ -179,15 +189,21 @@
   BOOL canEncrypt = SecKeyIsAlgorithmSupported(publicKey, kSecKeyOperationTypeEncrypt, algorithm);
   NSData *encryptedKey;
   if(canEncrypt) {
-    CFErrorRef error = NULL;
-    encryptedKey = (NSData*)CFBridgingRelease(SecKeyCreateEncryptedData(publicKey, algorithm, (__bridge CFDataRef)keyData, &error));
+    CFErrorRef cfError = NULL;
+    encryptedKey = (NSData*)CFBridgingRelease(SecKeyCreateEncryptedData(publicKey, algorithm, (__bridge CFDataRef)keyData, &cfError));
     if (!encryptedKey) {
-      NSError *err = CFBridgingRelease(error);
-      NSLog(@"Error while trying to decrypt the CompositeKey for TouchID unlock: %@", [err description]);
+      NSError *err = CFBridgingRelease(cfError);
+      NSLog(@"Error while trying to encrypt the CompositeKey for TouchID unlock: %@", [err description]);
+      if(error != NULL) {
+        *error = err;
+      }
     }
   }
   else {
     NSLog(@"The key retreived from the Keychain is unable to encrypt data");
+    if(error != NULL) {
+      *error = [NSError errorWithCode:MPErrorTouchIdUnsupportedKeyForEncrpytion description:NSLocalizedString(@"ERROR_TOUCH_ID_UNSUPPORTED_KEY", @"The key stored for TouchID is not suitable for encrpytion")];
+    }
   }
   if (publicKey)  {
     CFRelease(publicKey);
@@ -195,8 +211,8 @@
   return encryptedKey;
 }
 
-- (void)_createAndAddRSAKeyPair {
-  CFErrorRef error = NULL;
+- (BOOL)_createAndAddRSAKeyPair:(NSError **)saveError {
+  CFErrorRef cfError = NULL;
   NSString* publicKeyLabel =  @"MacPass TouchID Feature Public Key";
   NSString* privateKeyLabel = @"MacPass TouchID Feature Private Key";
   NSData* publicKeyTag =  [MPTouchIdUnlockPublicKeyTag  dataUsingEncoding:NSUTF8StringEncoding];
@@ -204,17 +220,17 @@
   SecAccessControlRef access = NULL;
   if (@available(macOS 10.13.4, *)) {
     SecAccessControlCreateFlags flags = kSecAccessControlBiometryCurrentSet;
-    if (@available(macOS 10.15, *)) {
-      flags |= kSecAccessControlWatch | kSecAccessControlOr;
-    }
     access = SecAccessControlCreateWithFlags(kCFAllocatorDefault,
                                              kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
                                              flags,
-                                             &error);
+                                             &cfError);
     if(access == NULL) {
-      NSError *err = CFBridgingRelease(error);
+      NSError *err = CFBridgingRelease(cfError);
       NSLog(@"Error while trying to create AccessControl for TouchID unlock feature: %@", [err description]);
-      return;
+      if(saveError != NULL) {
+        *saveError = err;
+      }
+      return NO;
     }
     NSDictionary* attributes = @{
       (id)kSecAttrKeyType:        (id)kSecAttrKeyTypeRSA,
@@ -232,18 +248,27 @@
               (id)kSecAttrLabel: publicKeyLabel,
             },
     };
-    SecKeyRef result = SecKeyCreateRandomKey((__bridge CFDictionaryRef)attributes, &error);
+    SecKeyRef result = SecKeyCreateRandomKey((__bridge CFDictionaryRef)attributes, &cfError);
     if(result == NULL) {
-      NSError *err = CFBridgingRelease(error);
+      NSError *err = CFBridgingRelease(cfError);
       NSLog(@"Error while trying to create a RSA keypair for TouchID unlock feature: %@", [err description]);
+      if(saveError != NULL) {
+        *saveError = err;
+      }
+      CFRelease(access);
+      return NO;
     }
     else {
       CFRelease(result);
     }
     CFRelease(access);
+    return YES;
   }
   else {
-    return;
+    if(saveError != NULL) {
+      *saveError = [NSError errorWithCode:MPErrorTouchIdUnsupportedKeyForEncrpytion description:NSLocalizedString(@"ERROR_TOUCH_ID_UNSUPPORTED_KEY", @"The key stored for TouchID is not suitable for encrpytion")];
+    }
+    return NO;
   }
 }
 

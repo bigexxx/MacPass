@@ -36,7 +36,10 @@
 + (instancetype)userContext {
   NSData *data = [NSUserDefaults.standardUserDefaults dataForKey:kMPSettingsKeyEntrySearchFilterContext];
   if(data) {
-    return [NSKeyedUnarchiver unarchiveObjectWithData:data];
+    id context = [NSKeyedUnarchiver unarchiveObjectWithData:data];
+    if([context isKindOfClass:MPEntrySearchContext.class]) {
+      return context;
+    }
   }
   return [self defaultContext];
 }

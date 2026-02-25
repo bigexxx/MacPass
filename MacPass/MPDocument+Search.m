@@ -54,7 +54,7 @@ static NSUInteger _MPAdvanceSearchGeneration(MPDocument *document) {
 
 - (void)enterSearchWithContext:(MPEntrySearchContext *)context {
   /* the search context is loaded via defaults */
-  self.searchContext = context;
+  self.searchContext = context ?: MPEntrySearchContext.defaultContext;
   [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateSearch:) name:KPKTreeDidAddEntryNotification object:self.tree];
   [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateSearch:) name:KPKTreeDidAddGroupNotification object:self.tree];
   [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateSearch:) name:KPKTreeDidRemoveEntryNotification object:self.tree];
@@ -75,6 +75,9 @@ static NSUInteger _MPAdvanceSearchGeneration(MPDocument *document) {
   if(NO == self.hasSearch) {
     [self enterSearchWithContext:[MPEntrySearchContext userContext]];
     return; // We get called back!
+  }
+  if(self.searchContext == nil) {
+    self.searchContext = MPEntrySearchContext.defaultContext;
   }
   MPDocumentWindowController *windowController = self.windowControllers.firstObject;
   self.searchContext.searchString = windowController.searchField.stringValue ?: @"";
@@ -159,11 +162,8 @@ static NSUInteger _MPAdvanceSearchGeneration(MPDocument *document) {
 
 #pragma mark Search
 - (NSArray *)_findEntriesMatchingSearch:(MPEntrySearchContext *)context {
+  context = context ?: MPEntrySearchContext.defaultContext;
   NSString *searchString = context.searchString ?: @"";
-  /* Empty search must not filter: show every entry. */
-  if(searchString.length == 0) {
-    return [self.root searchableChildEntries];
-  }
   /* Filter double passwords */
   if(MPIsFlagSetInOptions(MPEntrySearchDoublePasswords, context.searchFlags)) {
     NSMutableDictionary *passwordToEntryMap = [[NSMutableDictionary alloc] initWithCapacity:100];
@@ -196,6 +196,10 @@ static NSUInteger _MPAdvanceSearchGeneration(MPDocument *document) {
       return node.timeInfo.isExpired;
     }];
     return [[self.root searchableChildEntries] filteredArrayUsingPredicate:expiredPredicate];
+  }
+  /* Empty search must not filter for regular field searches. */
+  if(searchString.length == 0) {
+    return [self.root searchableChildEntries];
   }
   /* Filter using predicates */
   NSArray *predicates = [self _filterPredicatesWithString:searchString searchFlags:context.searchFlags];

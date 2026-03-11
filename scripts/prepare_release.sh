@@ -1,94 +1,172 @@
 #!/bin/bash
 
-POSITIONAL=()
-while [[ $# -gt 0 ]]
-do
-key="$1"
+set -euo pipefail
 
-case $key in
-    -s|--sign)
-    IDENTITY="$2"
-    shift # past argument
-    shift # past value
-    ;;
-    -u|--username)
-    USERNAME="$2"
-    shift # past argument
-    shift # past value
-    ;;
-    -p|--password)
-    PASSWORD="$2"
-    shift # past argument
-    shift # past value
-    ;;
-    -e|--entitlements)
-    ENTITLEMENTS="$2"
-    shift # past argument
-    shift # past value
-    ;;
-    *)    # unknown option
-    POSITIONAL+=("$1") # save it in an array for later
-    shift # past argument
-    ;;
-esac
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") --notary-profile <profile> [--team-id <team>] [--archive-path <path>] [--export-path <path>]
+
+Builds a signed Developer ID archive, exports MacPass.app, submits it for notarization,
+staples the ticket, and verifies the resulting app.
+
+Required:
+  --notary-profile   Keychain profile configured for xcrun notarytool
+
+Optional:
+  --team-id          Apple Developer Team ID to force during archive/export
+  --archive-path     Output xcarchive path (default: /tmp/MacPass.xcarchive)
+  --export-path      Output folder for exported app (default: /tmp/MacPass-export)
+EOF
+}
+
+NOTARY_PROFILE=""
+TEAM_ID=""
+ARCHIVE_PATH="/tmp/MacPass.xcarchive"
+EXPORT_PATH="/tmp/MacPass-export"
+PROFILE_NAME=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --notary-profile)
+            NOTARY_PROFILE="$2"
+            shift 2
+            ;;
+        --team-id)
+            TEAM_ID="$2"
+            shift 2
+            ;;
+        --archive-path)
+            ARCHIVE_PATH="$2"
+            shift 2
+            ;;
+        --export-path)
+            EXPORT_PATH="$2"
+            shift 2
+            ;;
+        --profile-name)
+            PROFILE_NAME="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
 done
 
-set -- "${POSITIONAL[@]}" # restore positional parameters
-
-if [[ -z "${IDENTITY}" ]]; then
-    echo "Missing identity"
-    exit -1
-fi
-if [[ -z "${ENTITLEMENTS}" ]]; then
-    echo "Missing entitlements"
-    exit -1
-fi
-if [[ -z "${USERNAME}" ]]; then
-    echo "Missing username"
-    exit -1
-fi
-if [[ -z "${PASSWORD}" ]]; then
-    echo "Missing password"
-    exit -1
+if [[ -z "${NOTARY_PROFILE}" ]]; then
+    echo "Missing required --notary-profile" >&2
+    usage
+    exit 1
 fi
 
-DERIVED_DATA_FOLDER="${TMPDIR}"
-BUILD_FOLDER="${DERIVED_DATA_FOLDER}"/Build/Products/Release
-APP_BUNDLE=MacPass.app
-APP_BUNDLE_ZIP="${APP_BUNDLE}".zip
-APP_FRAMEWORK_PATH="${APP_BUNDLE}"/Contents/Frameworks
-SPARKLE_FRAMEWORK="${APP_FRAMEWORK_PATH}"/Sparkle.framework
-SPARKLE_AUTOUPDATE_BUNDLE="${SPARKLE_FRAMEWORK}"/Resources/Autoupdate.app
-SPARKLE_FILEOP="${SPARKLE_AUTOUPDATE_BUNDLE}"/Contents/MacOS/fileop
-TRANSFORMERKIT_FRAMEWORK="${APP_FRAMEWORK_PATH}"/TransformerKit.framework
-KEEPASSKIT_FRAMEWORK="${APP_FRAMEWORK_PATH}"/KeePassKit.framework
-KISSXML_FRAMEWORK="${APP_FRAMEWORK_PATH}"/KissXML.framework
-HNHUI_FRAMEWORK="${APP_FRAMEWORK_PATH}"/HNHUi.framework
-cd ..
-echo "Building..."
-xcodebuild build -configuration Release -project MacPass.xcodeproj -scheme MacPass CODE_SIGNING_REQUIRED=NO -derivedDataPath "${DERIVED_DATA_FOLDER}"
-cd "${BUILD_FOLDER}"
-echo ""
-echo "Signing Sparkle - fileop..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${SPARKLE_FILEOP}"
-echo "Signing Sparkle - Autoupdate..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${SPARKLE_AUTOUPDATE_BUNDLE}"
-echo "Signing Sparkle..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${SPARKLE_FRAMEWORK}"
-echo "Signing TransformerKit..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${TRANSFORMERKIT_FRAMEWORK}"
-echo "Signing HNHUi..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${HNHUI_FRAMEWORK}"
-echo "Signing KeePassKit - KissXML..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${KISSXML_FRAMEWORK}"
-echo "Signing KeePassKit..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${KEEPASSKIT_FRAMEWORK}"
-echo "Signing MacPass..."
-codesign --sign "${IDENTITY}" --options runtime --force --entitlements "${ENTITLEMENTS}" "${APP_BUNDLE}"
-echo ""
-echo "Archiving..."
-ditto -c -k --keepParent "${APP_BUNDLE}" "${APP_BUNDLE_ZIP}"
-echo "Requesting Notarization..."
-xcrun altool --notarize-app --primary-bundle-id "com.hicknhacksoftware.MacPass.zip" --username "${USERNAME}" --password "${PASSWORD}" --file "${APP_BUNDLE_ZIP}"
-#xcrun stapler staple "${APP_BUNDLE}"
-#xmllint --xpath "/plist/dict/key[contains(text(),'success-message')]::following-sibling" status.xml
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_PATH="${REPO_ROOT}/MacPass.xcodeproj"
+SCHEME="MacPass"
+APP_NAME="MacPass.app"
+APP_PATH="${EXPORT_PATH}/${APP_NAME}"
+ZIP_PATH="${EXPORT_PATH}/MacPass.zip"
+EXPORT_OPTIONS_PLIST="${EXPORT_PATH}/ExportOptions.plist"
+
+build_setting() {
+    local key="$1"
+    xcodebuild -project "${PROJECT_PATH}" -scheme "${SCHEME}" -configuration Release -showBuildSettings 2>/dev/null \
+        | awk -F' = ' -v key="${key}" '$1 ~ key"$" { print $2; exit }'
+}
+
+if [[ -z "${PROFILE_NAME}" ]]; then
+    PROFILE_NAME="$(build_setting "PROVISIONING_PROFILE_SPECIFIER")"
+fi
+
+BUNDLE_ID="$(build_setting "PRODUCT_BUNDLE_IDENTIFIER")"
+
+mkdir -p "${EXPORT_PATH}"
+rm -rf "${ARCHIVE_PATH}" "${APP_PATH}" "${ZIP_PATH}" "${EXPORT_OPTIONS_PLIST}"
+
+cat > "${EXPORT_OPTIONS_PLIST}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+EOF
+
+if [[ -n "${TEAM_ID}" ]]; then
+    cat >> "${EXPORT_OPTIONS_PLIST}" <<EOF
+    <key>teamID</key>
+    <string>${TEAM_ID}</string>
+EOF
+fi
+
+if [[ -n "${PROFILE_NAME}" && -n "${BUNDLE_ID}" ]]; then
+    cat >> "${EXPORT_OPTIONS_PLIST}" <<EOF
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>${BUNDLE_ID}</key>
+        <string>${PROFILE_NAME}</string>
+    </dict>
+EOF
+fi
+
+cat >> "${EXPORT_OPTIONS_PLIST}" <<EOF
+</dict>
+</plist>
+EOF
+
+ARCHIVE_CMD=(
+    xcodebuild
+    -project "${PROJECT_PATH}"
+    -scheme "${SCHEME}"
+    -configuration Release
+    -archivePath "${ARCHIVE_PATH}"
+    archive
+)
+
+EXPORT_CMD=(
+    xcodebuild
+    -exportArchive
+    -archivePath "${ARCHIVE_PATH}"
+    -exportPath "${EXPORT_PATH}"
+    -exportOptionsPlist "${EXPORT_OPTIONS_PLIST}"
+)
+
+if [[ -n "${TEAM_ID}" ]]; then
+    ARCHIVE_CMD+=(DEVELOPMENT_TEAM="${TEAM_ID}")
+fi
+
+echo "Archiving signed release..."
+"${ARCHIVE_CMD[@]}"
+
+echo "Exporting Developer ID app..."
+"${EXPORT_CMD[@]}"
+
+if [[ ! -d "${APP_PATH}" ]]; then
+    echo "Expected exported app at ${APP_PATH}" >&2
+    exit 1
+fi
+
+echo "Packaging app for notarization..."
+ditto -c -k --keepParent "${APP_PATH}" "${ZIP_PATH}"
+
+echo "Submitting for notarization..."
+xcrun notarytool submit "${ZIP_PATH}" --keychain-profile "${NOTARY_PROFILE}" --wait
+
+echo "Stapling notarization ticket..."
+xcrun stapler staple "${APP_PATH}"
+
+echo "Verifying signature..."
+codesign --verify --deep --strict --verbose=4 "${APP_PATH}"
+
+echo "Assessing with Gatekeeper..."
+spctl --assess --type execute -vv "${APP_PATH}"
+
+echo "Release app is ready at ${APP_PATH}"
